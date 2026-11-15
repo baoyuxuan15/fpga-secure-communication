@@ -11,7 +11,7 @@
 - 正常回执：`A0`、灯状态 `00/01`、14 个 `00`。
 - 非法命令回执：`E0`、保持的灯状态 `00/01`、14 个 `00`；本次命令判定失败。
 
-程序启动后清空旧输入缓存，分段累计到 16 字节。所有读操作共用一个 2 秒截止时刻，而非每次读取都重新等待 2 秒。回执检查同时覆盖首字节、状态、末 14 字节及命令一致性。正常回执只证明 FPGA 报告的状态，仍需人工观察 D6。
+程序启动后清空旧输入缓存，分段累计到 16 字节。所有读操作共用一个 2 秒绝对截止时刻，而非每次读取都重新等待 2 秒；每轮把单次读超时限制在剩余预算内，收满 16 字节后再按同一截止时刻复核一次，超过截止时刻才收满的回执判为超时（退出码 `2`）。回执检查同时覆盖首字节、状态、末 14 字节及命令一致性。正常回执只证明 FPGA 报告的状态，仍需人工观察 D6。
 
 ## 安装与运行（Windows PowerShell）
 
@@ -68,7 +68,8 @@ python -m unittest -v pc/test_demo.py
 1. 开关灯共用密文、正常回执及 115200/8N1/无流控设置；
 2. 清空输入、只发一次、完整写出、分段累计、总超时；
 3. 零字节和部分帧超时、非法标志/状态/填充、`E0`、状态与命令不符；
-4. 打开端口失败、读时断开、短写、写超时，以及成功/失败后的端口关闭。
+4. 打开端口失败、读时断开、短写、写超时，以及成功/失败后的端口关闭；
+5. 末段分别在 1.990 s、2.000 s 和 2.025 s 到达：前两者 PASS，2.025 s 判超时、退出码 `2`，不打印 PASS（复现评审给出的临界场景）。
 
 上述测试无需 FPGA，也不能证明 UART 或 AES RTL 已实现。
 
@@ -90,7 +91,7 @@ python -m unittest -v pc/test_demo.py
 
 ## 当前实际验证记录
 
-验证日期：2026-11-15。工作起点为 `main` 的 `a4ff957051aee7c9557c87200c5d0a42fc696ec6`，本地分支为 `feature/pc-test`；代码尚未提交，因此尚无本次改动的最终提交号。
+验证日期：2026-11-15。工作起点为 `main` 的 `a4ff957051aee7c9557c87200c5d0a42fc696ec6`，本地分支为 `feature/pc-test`。超时修复、新增临界用例与 `sim/tb_pc_vectors.sv` 的提交为 `1a18b79`，本节的验证记录由紧随其后的文档提交补充。
 
 环境：Windows，本机 Python 3.14.3，`cryptography 46.0.5`，`pyserial 3.5`。仓库中的 `.venv` 是 Linux/MSYS 风格环境，不能直接在 PowerShell 中使用；上面给出的 `.venv\Scripts` 步骤可在 Windows 创建正确环境。
 
@@ -112,7 +113,7 @@ PASS: offline reference vectors
 
 这里只验证软件 AES 参考数据，不代表 FPGA AES 核通过。
 
-### 模拟串口：14 项通过
+### 模拟串口：17 项通过
 
 实际命令：
 
@@ -120,7 +121,47 @@ PASS: offline reference vectors
 C:/Users/MR/AppData/Local/Python/bin/python.exe -m unittest -v pc/test_demo.py
 ```
 
-实际结果：`Ran 14 tests in 4.035s`，`OK`。替代范围见上文；未使用 UART、协议或 AES RTL，未观察真实 D6。
+实际结果：`Ran 17 tests in 4.034s`，`OK`。其中原有 14 项仍通过，新增 3 项覆盖 1.990 s、2.000 s、2.025 s 三个临界时刻。替代范围见上文；未使用 UART、协议或 AES RTL，未观察真实 D6。
+
+### 跨端向量 testbench（ModelSim）：通过
+
+实际命令（从仓库根目录执行，先清掉旧库以确保重新编译）：
+
+```text
+rm -rf work
+vlib work
+vlog +incdir+rtl rtl/aes_dec.v
+vlog -sv sim/tb_pc_vectors.sv
+vsim -c tb_pc_vectors -do "run -all; quit -f"
+```
+
+环境：ModelSim SE-64 2020.4。实际输出（PASS 行原样摘录）：
+
+```text
+# [1] PC on request: first byte in [127:120]
+#   PASS ct=e37cd363dd7c87a09aff0e3e60e09c82 -> pt=01000000000000000000000000000000 (16 bytes)
+# [2] PC off request: first byte in [127:120]
+#   PASS ct=c6a13b37878f5b826f4f8162a1c8d879 -> pt=00000000000000000000000000000000 (16 bytes)
+# PASS: tb_pc_vectors on/off byte order (32 bytes, max 11 cycles)
+```
+
+该用例用 `pc/reference.py` 生成的请求密文驱动真实 `rtl/aes_dec.v`，按 PC 发送顺序把首字节放在 `block_in[127:120]`，等 `done` 后逐字节核对 32 字节明文。它验证 RTL 解密与字节序，不代表实板 UART、协议或 D6 已验证。
+
+### Quartus Analysis & Synthesis：通过
+
+图形界面：Quartus 18.0 → File → New Project Wizard，器件选 Cyclone IV E / `EP4CE10F17C8`，顶层实体 `aes_dec`，加入 `rtl/aes_dec.v` 并把 `rtl` 加入搜索路径（用于 `include "aes_tables.vh"`），然后 Processing → Start → Start Analysis & Synthesis。
+
+命令行等价做法：在工程目录放入下列关键赋值后运行 `quartus_map aes_dec_synth.qpf`：
+
+```text
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE10F17C8
+set_global_assignment -name TOP_LEVEL_ENTITY aes_dec
+set_global_assignment -name VERILOG_FILE rtl/aes_dec.v
+set_global_assignment -name SEARCH_PATH rtl
+```
+
+实际结果：`Quartus Prime Analysis & Synthesis was successful. 0 errors, 0 warnings`，耗时约 37 s；资源为 4178 logic cells、8 RAM segments（查表 ROM 推断）、131 input pins、130 output pins。未做全编译、时序分析、引脚分配或 sof 生成。
 
 ### 命令行错误路径：已验证
 
@@ -128,4 +169,4 @@ C:/Users/MR/AppData/Local/Python/bin/python.exe -m unittest -v pc/test_demo.py
 
 ### 真实 FPGA：未验证
 
-本机没有用于该项目的已确认 FPGA 串口和对应正式 sof；仓库当前 UART、协议与 AES RTL 仍为占位。因此**没有执行真实 on/off、10 轮、非法命令或复位上板验收**，不能宣称硬件通过。待组长完成集成后按上节执行并填写记录。
+本机没有用于该项目的已确认 FPGA 串口和对应正式 sof；仓库当前 UART、协议与 AES RTL 仍为占位。因此**没有执行真实 on/off、10 轮、非法命令或复位上板验收**，不能宣称硬件通过。上面的 testbench 仅证明 AES 解密 RTL 在仿真中与 PC 向量一致，Quartus 仅证明该 RTL 可综合，两者都不等于实板联调。**实板状态保持“待联调”**，待组长完成集成后按上节执行并填写记录。
