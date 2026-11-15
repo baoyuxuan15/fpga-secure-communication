@@ -51,6 +51,81 @@ class FakeSerial:
         return self.read_chunks.pop(0) if self.read_chunks else b""
 
 
+READ_SETUP_SECONDS = 0.050  # 设置读超时至开始读取之间的固定开销
+
+
+class ManualClock:
+    """可控单调时钟，用于复现评审给出的截止时刻场景。"""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+    def jump_to(self, moment):
+        self.now = moment
+
+
+class TimedSerial:
+    """模拟串口：设置超时到真正开始读取之间固定消耗 0.050 s。
+
+    每次 read 只遵守当次传入的单次超时；若下一段数据在单次超时内到达就返回，
+    否则在该次读取的截止时刻返回空字节。评审场景中，末 8 字节因此可能在
+    整体 2 秒截止时刻之后才被读回。
+    """
+
+    instances = []
+    clock = ManualClock()
+    chunks = []
+
+    def __init__(self, **settings):
+        self._timeout = settings["timeout"]
+        self.closed = False
+        self.writes = []
+        self.read_sizes = []
+        type(self).instances.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.closed = True
+
+    @property
+    def timeout(self):
+        return self._timeout
+
+    @timeout.setter
+    def timeout(self, value):
+        type(self).clock.advance(READ_SETUP_SECONDS)
+        self._timeout = value
+
+    def reset_input_buffer(self):
+        pass
+
+    def write(self, data):
+        self.writes.append(data)
+        return len(data)
+
+    def read(self, size):
+        self.read_sizes.append(size)
+        read_deadline = type(self).clock() + self._timeout
+        if not type(self).chunks:
+            type(self).clock.jump_to(read_deadline)
+            return b""
+        arrival, data = type(self).chunks[0]
+        if arrival > read_deadline:
+            type(self).clock.jump_to(read_deadline)
+            return b""
+        type(self).chunks.pop(0)
+        type(self).clock.jump_to(arrival)
+        return data
+
+
 class ReceiveTests(unittest.TestCase):
     def test_segmented_read_accumulates_exact_frame(self):
         data = bytes(range(16))
@@ -237,6 +312,60 @@ class ExchangeTests(unittest.TestCase):
         self.assertEqual(result, 2)
         self.assertIn("write timeout", errors)
         self.assertTrue(port.closed)
+
+
+@mock.patch.object(demo.serial, "Serial", TimedSerial)
+class DeadlineTests(unittest.TestCase):
+    """回归评审场景：末段在整体 2 秒绝对截止时刻两侧的判定。"""
+
+    def setUp(self):
+        TimedSerial.instances.clear()
+        TimedSerial.clock = ManualClock()
+        TimedSerial.chunks = []
+
+    def exchange(self, last_arrival):
+        TimedSerial.clock = ManualClock()
+        TimedSerial.chunks = [
+            (0.500, reply(True)[:8]),
+            (last_arrival, reply(True)[8:]),
+        ]
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with mock.patch.object(demo.time, "monotonic", TimedSerial.clock):
+            with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                with mock.patch.object(
+                    demo.sys, "argv",
+                    ["demo.py", "--port", "COM3", "--command", "on"],
+                ):
+                    result = demo.main()
+        return result, TimedSerial.instances[-1], stdout.getvalue(), stderr.getvalue()
+
+    def test_last_segment_before_deadline_passes(self):
+        result, port, output, errors = self.exchange(1.990)
+        self.assertEqual(result, 0)
+        self.assertEqual(errors, "")
+        self.assertIn("PASS", output)
+        self.assertEqual(port.read_sizes, [16, 8])
+        self.assertTrue(port.closed)
+        self.assertLessEqual(TimedSerial.clock(), demo.TIMEOUT_SECONDS)
+
+    def test_last_segment_exactly_at_deadline_passes(self):
+        result, _, output, errors = self.exchange(demo.TIMEOUT_SECONDS)
+        self.assertEqual(result, 0)
+        self.assertEqual(errors, "")
+        self.assertIn("PASS", output)
+        self.assertEqual(TimedSerial.clock(), demo.TIMEOUT_SECONDS)
+
+    def test_last_segment_after_deadline_times_out(self):
+        result, port, output, errors = self.exchange(2.025)
+        self.assertEqual(result, 2)
+        self.assertNotIn("PASS", output)
+        self.assertIn("超时", errors)
+        self.assertIn("16/16", errors)
+        self.assertIn(reply(True)[8:].hex(), errors)
+        self.assertEqual(port.read_sizes, [16, 8])
+        self.assertTrue(port.closed)
+        self.assertAlmostEqual(TimedSerial.clock(), 2.025)
 
 
 if __name__ == "__main__":

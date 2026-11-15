@@ -54,6 +54,14 @@ def receive_frame(port, timeout=TIMEOUT_SECONDS, clock=None):
             f"等待回执超时（{timeout:g} 秒）：已收到 {len(received)}/{FRAME_SIZE} "
             f"字节，数据为 {bytes(received).hex() or '（无）'}。"
         )
+    # pyserial 的 timeout 只约束单次 read；设置超时到真正开始读取之间还有开销，
+    # 最后一段可能在截止时刻之后才返回。收满 16 字节后仍要按同一个绝对截止时刻
+    # 复核，避免把迟到的回执判为成功（退出码应为 2 而不是 0）。
+    if clock() > deadline:
+        raise CommunicationError(
+            f"等待回执超时（{timeout:g} 秒）：回执在截止时刻之后才收满 "
+            f"{FRAME_SIZE}/{FRAME_SIZE} 字节，数据为 {bytes(received).hex()}。"
+        )
     return bytes(received)
 
 
