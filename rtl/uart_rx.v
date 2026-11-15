@@ -6,12 +6,12 @@ module uart_rx (
     output reg [7:0] rx_data
 );
     localparam CLKS_PER_BIT = 9'd434;
-    localparam HALF_BIT     = 9'd217;  // center of one bit period
+    localparam BIT_CENTER   = 9'd216;  // 217th clock of a bit, its center
 
     localparam S_IDLE       = 3'd0;    // line high, wait for start edge
-    localparam S_START      = 3'd1;    // confirm start bit at half bit
+    localparam S_START      = 3'd1;    // confirm start bit at its center
     localparam S_DATA       = 3'd2;    // sample 8 data bits
-    localparam S_STOP       = 3'd3;    // check stop bit
+    localparam S_STOP       = 3'd3;    // check stop bit at its center
     localparam S_WAIT_HIGH  = 3'd4;    // framing error: wait for line high
 
     // Two-stage synchronizer for the asynchronous RX line. Idle is high.
@@ -27,7 +27,7 @@ module uart_rx (
     end
 
     reg [2:0]  state;
-    reg [8:0]  cnt;        // clocks inside the current bit
+    reg [8:0]  cnt;        // 0 .. CLKS_PER_BIT-1 inside the current bit
     reg [2:0]  bit_idx;    // data bit 0 .. 7, LSB arrives first
     reg [7:0]  rx_shift;   // bits shifted in, bit 0 lands in rx_shift[0]
 
@@ -47,22 +47,21 @@ module uart_rx (
                     cnt     <= 9'd0;
                     bit_idx <= 3'd0;
                     if (rx_sync == 1'b0) begin
-                        // Possible start bit; re-check at its center.
+                        // Possible start bit; confirm it at its center.
                         state <= S_START;
-                        cnt   <= 9'd1;
+                        cnt   <= 9'd0;
                     end
                 end
 
                 S_START: begin
-                    if (cnt == HALF_BIT - 9'd1 && rx_sync == 1'b1) begin
+                    if (cnt == BIT_CENTER && rx_sync == 1'b1) begin
                         // Glitch: back to idle and wait for a new edge.
                         state <= S_IDLE;
                         cnt   <= 9'd0;
                     end else if (cnt == CLKS_PER_BIT - 9'd1) begin
-                        // Start bit confirmed; finish its full period, then
-                        // line up the first data bit at its center.
+                        // Start bit confirmed after a full 434 clocks.
                         state   <= S_DATA;
-                        cnt     <= 9'd1;
+                        cnt     <= 9'd0;
                         bit_idx <= 3'd0;
                     end else begin
                         cnt <= cnt + 9'd1;
@@ -70,13 +69,13 @@ module uart_rx (
                 end
 
                 S_DATA: begin
-                    if (cnt == HALF_BIT - 9'd1) begin
-                        // Sample current bit at its center; LSB first.
+                    if (cnt == BIT_CENTER) begin
+                        // Sample this bit at its center; LSB first.
                         rx_shift <= {rx_sync, rx_shift[7:1]};
                         cnt      <= cnt + 9'd1;
                     end else if (cnt == CLKS_PER_BIT - 9'd1) begin
-                        // End of this bit period.
-                        cnt <= 9'd1;
+                        // End of this bit: the next one starts at cnt = 0.
+                        cnt <= 9'd0;
                         if (bit_idx == 3'd7) begin
                             state <= S_STOP;
                         end else begin
@@ -88,19 +87,19 @@ module uart_rx (
                 end
 
                 S_STOP: begin
-                    if (cnt == HALF_BIT - 9'd1 && rx_sync == 1'b0) begin
-                        // Framing error detected at the stop-bit center:
-                        // drop the byte and wait for the line to go high.
-                        state <= S_WAIT_HIGH;
-                        cnt   <= 9'd0;
-                    end else if (cnt == CLKS_PER_BIT - 9'd1) begin
-                        // Stop bit finished: present the byte and pulse valid.
+                    if (cnt == BIT_CENTER) begin
+                        // Decide the byte here, at the stop-bit center, so a
+                        // back-to-back start bit is not mistaken for a bad
+                        // stop bit at the end of the bit.
                         if (rx_sync == 1'b1) begin
                             rx_data  <= rx_shift;
                             rx_valid <= 1'b1;
+                            state    <= S_IDLE;
+                        end else begin
+                            // Framing error: drop the byte, wait for idle high.
+                            state <= S_WAIT_HIGH;
                         end
-                        state <= S_IDLE;
-                        cnt   <= 9'd0;
+                        cnt <= 9'd0;
                     end else begin
                         cnt <= cnt + 9'd1;
                     end

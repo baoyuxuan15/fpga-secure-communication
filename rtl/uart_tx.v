@@ -14,7 +14,7 @@ module uart_tx (
     localparam S_STOP  = 3'd3;  // send stop bit (high)
 
     reg [2:0] state;
-    reg [8:0] cnt;        // clocks inside the current bit
+    reg [8:0] cnt;        // 0 .. CLKS_PER_BIT-1 inside the current bit
     reg [2:0] bit_idx;    // data bit 0 .. 7
     reg [7:0] tx_data_q;   // byte latched on the handshake edge
 
@@ -70,9 +70,11 @@ module uart_tx (
                 end
 
                 S_STOP: begin
-                    uart_txd <= 1'b1;   // stop bit
-                    if (cnt == CLKS_PER_BIT - 9'd1) begin
-                        // Byte finished: accept the next one.
+                    uart_txd <= 1'b1;   // stop bit, a full 434 clocks
+                    // S_STOP starts counting on the entry clock itself, so it
+                    // needs one extra count compared with the other bits.
+                    if (cnt == CLKS_PER_BIT) begin
+                        // Whole stop bit sent: only now report ready again.
                         state    <= S_IDLE;
                         tx_ready <= 1'b1;
                         cnt      <= 9'd0;
