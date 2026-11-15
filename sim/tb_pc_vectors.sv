@@ -2,7 +2,7 @@
 // 6 号跨端向量：按电脑端发送顺序把 on/off 请求密文送入真实的 aes_dec，
 // 等待 done 后按串口字节顺序逐字节核对解密明文。
 // 分组首字节位于 block_in[127:120]，末字节位于 [7:0]；这与 pc/demo.py 写出的
-// 16 字节顺序一致。两个密文来自 python pc/reference.py 的 request(led_on) 输出。
+// 16 字节顺序一致。两个密文分别来自 python pc/reference.py 的 request(True/False) 输出。
 module tb_pc_vectors;
     reg          clk = 0;
     reg          rst_n = 0;
