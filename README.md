@@ -47,8 +47,8 @@ fpga-secure-communication/
 ├── rtl/                         # FPGA 正式硬件源码
 │   ├── top.v                    # 1 号维护，顶层连接已建立
 │   ├── board_echo.v             # 1 号维护，线路自检逻辑已实现
-│   ├── uart_rx.v                # 2 号实现，当前为接收接口占位
-│   ├── uart_tx.v                # 2 号实现，当前为发送接口占位
+│   ├── uart_rx.v                # 2 号，UART 接收已通过模块仿真和独立综合
+│   ├── uart_tx.v                # 2 号，UART 发送已通过模块仿真和独立综合
 │   ├── comm_ctrl.v              # 3 号实现，当前为协议接口占位
 │   ├── aes_enc.v                # 4 号，AES-128 加密核已通过模块仿真
 │   ├── aes_dec.v                # 5 号，AES-128 解密核已通过模块仿真
@@ -62,6 +62,7 @@ fpga-secure-communication/
 │   └── board.sdc                # 50 MHz 主时钟约束
 │
 ├── sim/                         # 仿真测试源码
+│   ├── tb_uart.sv               # 2 号，串口收发、位宽、握手和复位测试
 │   ├── tb_aes.sv                # 共用 AES 加密/解密向量测试
 │   ├── tb_aes_enc_extra.sv      # 4 号，加密核握手与复位测试
 │   └── tb_aes_dec_extra.sv      # 5 号，解密核握手与复位测试
@@ -84,7 +85,6 @@ fpga-secure-communication/
 | 负责人 | 后续新建文件 | 用途 |
 |---|---|---|
 | 1 号 | sim/tb_system.sv | 整机连接及流程仿真 |
-| 2 号 | sim/tb_uart.sv | UART 字节收发及位序验证 |
 | 3 号 | sim/tb_comm_ctrl.sv | 模拟上下游的协议独立验证 |
 | 6 号 | pc/demo.py、pc/test_demo.py（按实际测试编写）、sim/tb_pc_vectors.sv | 串口演示、电脑端测试及电脑与 FPGA 的向量核对 |
 
@@ -124,7 +124,7 @@ Quartus 生成的程序保存在 quartus/output_files/，该目录由 Git 忽略
 
 ## 第一次上板
 
-用 Quartus 18.0 打开 `quartus/secure_comm.qpf`，在 **Project → Revisions** 选 **board_echo** 后编译。用 USB-Blaster 下载 `quartus/output_files/board_echo.sof`。按野火说明连接板载 USB 串口和跳帽，在串口工具选择对应 COM、115200、8N1、无流控，关闭本地回显，按 HEX 发送 `00 55 AA FF`。应收到相同的四字节，按住复位可点亮 D6。该版本验证物理串口线路。正式工程选 **secure_comm**，其顶层已连接两个 AES 核，UART 和协议控制器仍为占位。[串口接线图](https://doc.embedfire.com/fpga/altera/ep4ce10_pro/zh/latest/code/rs232.html) · [D6 说明](https://doc.embedfire.com/fpga/altera/ep4ce10_pro/zh/latest/code/led.html)
+用 Quartus 18.0 打开 `quartus/secure_comm.qpf`，在 **Project → Revisions** 选 **board_echo** 后编译。用 USB-Blaster 下载 `quartus/output_files/board_echo.sof`。按野火说明连接板载 USB 串口和跳帽，在串口工具选择对应 COM、115200、8N1、无流控，关闭本地回显，按 HEX 发送 `00 55 AA FF`。应收到相同的四字节，按住复位可点亮 D6。该版本验证物理串口线路。正式工程选 **secure_comm**，其顶层已连接 UART 收发和两个 AES 核，协议控制器待接入。[串口接线图](https://doc.embedfire.com/fpga/altera/ep4ce10_pro/zh/latest/code/rs232.html) · [D6 说明](https://doc.embedfire.com/fpga/altera/ep4ce10_pro/zh/latest/code/led.html)
 
 ## 模块测试
 
@@ -153,4 +153,4 @@ vsim -c tb_aes_dec_extra -do "run -all; quit -f"
 
 ## 框架验证状态
 
-已核对电脑端离线参考向量、正式顶层端口展开及 board_echo 的 Quartus 完整编译。两个 AES 核已在 ModelSim SE-64 2020.4 通过共用向量和各自的扩展测试。UART 与协议 RTL 待实现，串口收发、D6 状态和加密回执留待整机上板核对。[4 号加密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/1) · [5 号解密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/2)
+已核对电脑端离线参考向量、正式顶层端口展开及 board_echo 的 Quartus 完整编译。两个 AES 核已在 ModelSim SE-64 2020.4 通过共用向量和各自的扩展测试。UART 收发已通过七阶段 ModelSim 测试。接收采样间隔和发送停止位至就绪的间隔均为 434 拍，`uart_rx` 与 `uart_tx` 单独综合均为 0 错误、0 告警。协议控制器待接入，串口收发、D6 状态和加密回执留待整机上板核对。[2 号 UART 验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/6) · [4 号加密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/1) · [5 号解密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/2)
