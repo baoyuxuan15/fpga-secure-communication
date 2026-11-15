@@ -83,10 +83,10 @@ fpga-secure-communication/
 
 | 负责人 | 后续新建文件 | 用途 |
 |---|---|---|
-| 1 号 | sim/tb_system.sv（若编写） | 整机连接及流程仿真 |
+| 1 号 | sim/tb_system.sv | 整机连接及流程仿真 |
 | 2 号 | sim/tb_uart.sv | UART 字节收发及位序验证 |
 | 3 号 | sim/tb_comm_ctrl.sv | 模拟上下游的协议独立验证 |
-| 6 号 | pc/demo.py、pc/test_demo.py（按实际测试编写） | 串口演示及电脑端测试 |
+| 6 号 | pc/demo.py、pc/test_demo.py（按实际测试编写）、sim/tb_pc_vectors.sv | 串口演示、电脑端测试及电脑与 FPGA 的向量核对 |
 
 Quartus 生成的程序保存在 quartus/output_files/，该目录由 Git 忽略。组长本机已有 board_echo.sof 自检程序，组员可从工程重新编译生成。
 
@@ -96,7 +96,7 @@ Quartus 生成的程序保存在 quartus/output_files/，该目录由 Git 忽略
 
 网页 AI 使用者将这四份公共文档、对应任务书和该模块源码一起上传或粘贴。能够读取仓库的 AI 从当前分支直接读取。统一时序以 INTERFACE.md 为准。
 
-六个人如何当天同时开工、上游未完成时用什么测试、每人需要提交哪些文件，都列在 [并行开发与交付](并行开发与交付.md)。组员完成一版后提交源码和测试文件，运行命令、实际结果及模拟范围写入 Pull Request 正文。
+六个人如何当天同时开工、上游未完成时用什么测试、每人需要提交哪些文件，都列在 [并行开发与交付](并行开发与交付.md)。每人先用自己的 Testbench 跑 ModelSim，再做 Quartus Analysis & Synthesis，把两份结果和复现步骤写进 PR。组长评审合并后，负责整机仿真、完整编译、引脚与时序核对，并与 6 号一起上板验收。[方案一：分布式测试](并行开发与交付.md#distributed-testing)
 
 | 人员 | Git 分支 | 负责文件 | 交付条件 |
 |---|---|---|---|
