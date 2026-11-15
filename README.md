@@ -65,11 +65,15 @@ fpga-secure-communication/
 │   ├── tb_uart.sv               # 2 号，串口收发、位宽、握手和复位测试
 │   ├── tb_aes.sv                # 共用 AES 加密/解密向量测试
 │   ├── tb_aes_enc_extra.sv      # 4 号，加密核握手与复位测试
-│   └── tb_aes_dec_extra.sv      # 5 号，解密核握手与复位测试
+│   ├── tb_aes_dec_extra.sv      # 5 号，解密核握手与复位测试
+│   └── tb_pc_vectors.sv         # 6 号，电脑请求与 FPGA 解密字节序测试
 │
 ├── pc/                          # 电脑端，6 号负责
 │   ├── reference.py             # 已提供的离线加解密与参考数据
-│   └── requirements.txt         # Python 依赖
+│   ├── requirements.txt         # Python 依赖
+│   ├── demo.py                  # 发送开关灯命令并校验回执
+│   ├── test_demo.py             # 模拟串口与超时边界测试
+│   └── README.md                # 电脑端运行与实板联调步骤
 │
 └── tasks/                       # 各角色可直接交给 AI 的任务书
     ├── 01-integration.md        # 1 号，组长与工程集成
@@ -86,7 +90,6 @@ fpga-secure-communication/
 |---|---|---|
 | 1 号 | sim/tb_system.sv | 整机连接及流程仿真 |
 | 3 号 | sim/tb_comm_ctrl.sv | 模拟上下游的协议独立验证 |
-| 6 号 | pc/demo.py、pc/test_demo.py（按实际测试编写）、sim/tb_pc_vectors.sv | 串口演示、电脑端测试及电脑与 FPGA 的向量核对 |
 
 Quartus 生成的程序保存在 quartus/output_files/，该目录由 Git 忽略。组长本机已有 board_echo.sof 自检程序，组员可从工程重新编译生成。
 
@@ -105,7 +108,7 @@ Quartus 生成的程序保存在 quartus/output_files/，该目录由 Git 忽略
 | [3 · 协议与灯控制](tasks/03-protocol.md) | feature/protocol | rtl/comm_ctrl.v、sim/tb_comm_ctrl.sv | 用模拟 AES 验证完整请求、单次启动、灯状态和 16 字节回执。 |
 | [4 · AES 加密](tasks/04-encrypt.md) | feature/aes-encrypt | rtl/aes_enc.v、独立扩展测试 | 复用已有 S 盒和轮密钥，通过标准分组、开灯分组及握手验证。 |
 | [5 · AES 解密](tasks/05-decrypt.md) | feature/aes-decrypt | rtl/aes_dec.v、独立扩展测试 | 复用逆 S 盒和轮密钥，通过标准密文、开灯密文及握手验证。 |
-| [6 · 电脑端与记录](tasks/06-pc-test.md) | feature/pc-test | pc/demo.py（新建）、pc/reference.py、电脑端测试 | 复用参考代码实现串口 on/off，核对回执，协助整机验证。 |
+| [6 · 电脑端与记录](tasks/06-pc-test.md) | feature/pc-test | pc/demo.py、pc/reference.py、电脑端测试 | 复用参考代码实现串口 on/off，核对回执，协助整机验证。 |
 
 ## 共同编码约束
 
@@ -154,3 +157,5 @@ vsim -c tb_aes_dec_extra -do "run -all; quit -f"
 ## 框架验证状态
 
 已核对电脑端离线参考向量、正式顶层端口展开及 board_echo 的 Quartus 完整编译。两个 AES 核已在 ModelSim SE-64 2020.4 通过共用向量和各自的扩展测试。UART 收发已通过七阶段 ModelSim 测试。接收采样间隔和发送停止位至就绪的间隔均为 434 拍，`uart_rx` 与 `uart_tx` 单独综合均为 0 错误、0 告警。协议控制器待接入，串口收发、D6 状态和加密回执留待整机上板核对。[2 号 UART 验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/6) · [4 号加密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/1) · [5 号解密核验收](https://github.com/baoyuxuan15/fpga-secure-communication/pull/2)
+
+6 号电脑端已通过 17 项 Python 测试。ModelSim 用真实 `aes_dec` 逐字节核对了电脑端发送的开灯、关灯请求，32 字节全部一致。实板串口和 D6 随整机验收。[6 号电脑端复审记录](https://github.com/baoyuxuan15/fpga-secure-communication/pull/5#pullrequestreview-5911401332)
