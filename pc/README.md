@@ -186,6 +186,8 @@ quartus_pgm -c USB-Blaster -m JTAG -o "P;D:\project_one\secure_comm.sof"
 
 下载报告 EP4CE10F17 JTAG ID `0x020F10DD`，`Configuration succeeded -- 1 device(s) configured`，0 errors、0 warnings。串口为 COM5（USB-SERIAL CH340，115200 8N1，无流控）。
 
+整机 `secure_comm` 完整编译：0 errors、7 warnings；8499/10320 LE（82%）、851 registers；slow 85C setup +6.057 ns、hold +0.452 ns；fast 0C setup +13.474 ns、hold +0.186 ns。`.sof` 未入库（`.gitignore` 忽略 `output_files/` 与 `*.sof`），组员需从同一提交重编后核对上面的 SHA256。
+
 实板结果：
 
 - on：RX=`b026dbf27fcdfabeeab01ed0cb78ac66`，PT=`a0010000000000000000000000000000`，PASS，D6 亮。
