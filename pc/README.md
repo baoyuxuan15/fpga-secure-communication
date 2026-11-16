@@ -96,7 +96,7 @@ python -m unittest -v pc/test_demo.py
 | 2026-11-16 复位恢复 | `4b49ae6` / `secure_comm.sof` | COM5 | RESET 后重发完整 on 帧 | `b026dbf27fcdfabeeab01ed0cb78ac66` / `a0010000000000000000000000000000` | PASS | 复位后亮一下，随后 off 灭 |
 | 2026-11-16 结束 | `4b49ae6` / `secure_comm.sof` | COM5 | off | `966aab7bda958e77dd00c494cfc001d6` / `a0000000000000000000000000000000` | PASS | 灭 |
 
-实板使用的 `secure_comm.sof` 为 main `4b49ae6` 全编译产物，358718 字节，SHA256 `3055b06b1c8e6333762c84a7bcdc54dbcf1a3f6d81e4a1519ae490f47e0a769d`。D6 是四颗蓝色用户灯中的第一颗（用户称 LED2），红色 LED1 是电源指示灯。
+实板使用的 `secure_comm.sof` 为基于 main `4b49ae6` 工程的 Quartus 18.0 全编译产物，358718 字节，SHA256 `3055b06b1c8e6333762c84a7bcdc54dbcf1a3f6d81e4a1519ae490f47e0a769d`。该哈希只标识本次实测产物，重新编译的 `.sof` 可能因构建时间不同而哈希不同。D6 是四颗蓝色用户灯中的第一颗（用户称 LED2），红色 LED1 是电源指示灯。
 
 ## 当前实际验证记录
 
@@ -186,7 +186,7 @@ quartus_pgm -c USB-Blaster -m JTAG -o "P;D:\project_one\secure_comm.sof"
 
 下载报告 EP4CE10F17 JTAG ID `0x020F10DD`，`Configuration succeeded -- 1 device(s) configured`，0 errors、0 warnings。串口为 COM5（USB-SERIAL CH340，115200 8N1，无流控）。
 
-整机 `secure_comm` 完整编译：0 errors、7 warnings；8499/10320 LE（82%）、851 registers；slow 85C setup +6.057 ns、hold +0.452 ns；fast 0C setup +13.474 ns、hold +0.186 ns。`.sof` 未入库（`.gitignore` 忽略 `output_files/` 与 `*.sof`），组员需从同一提交重编后核对上面的 SHA256。
+整机 `secure_comm` 完整编译：0 errors、7 warnings；8499/10320 LE（82%）、851 registers；slow 85C setup +6.057 ns、hold +0.452 ns；fast 0C setup +13.474 ns、hold +0.186 ns。`.sof` 未入库（`.gitignore` 忽略 `output_files/` 与 `*.sof`）；上面的 SHA256 只标识本次实测产物，重编后可能不同，组员应重编并在板上复测功能。
 
 实板结果：
 
