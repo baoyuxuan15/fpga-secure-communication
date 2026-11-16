@@ -71,7 +71,7 @@ python -m unittest -v pc/test_demo.py
 4. 打开端口失败、读时断开、短写、写超时，以及成功/失败后的端口关闭；
 5. 末段分别在 1.990 s、2.000 s 和 2.025 s 到达：前两者 PASS，2.025 s 判超时、退出码 `2`，不打印 PASS（复现评审给出的临界场景）。
 
-上述测试无需 FPGA，也不能证明 UART 或 AES RTL 已实现。
+上述测试无需 FPGA，只能证明电脑端软件和模拟串口行为，不能替代 UART/AES RTL 仿真或实板联调；实板结果见下文。
 
 ## 整机联调步骤
 
@@ -87,11 +87,20 @@ python -m unittest -v pc/test_demo.py
 
 | 日期/轮次 | Git 提交号 / sof | COM | 命令或场景 | 实际 RX 密文及明文 | PC 判定 | D6 人工观察 |
 |---|---|---|---|---|---|---|
-| 待实板联调 | 待填写 | 待填写 | on / off / 10 轮 / 非法 / 复位 | 待填写 | 待填写 | 待填写 |
+| 2026-11-16 on | `4b49ae6` / `secure_comm.sof` | COM5 | on | `b026dbf27fcdfabeeab01ed0cb78ac66` / `a0010000000000000000000000000000` | PASS | 亮 |
+| 2026-11-16 off | `4b49ae6` / `secure_comm.sof` | COM5 | off | `966aab7bda958e77dd00c494cfc001d6` / `a0000000000000000000000000000000` | PASS | 灭 |
+| 2026-11-16 10 轮 | `4b49ae6` / `secure_comm.sof` | COM5 | on/off 交替 10 轮 | 每轮对应正常回执，逐轮核对 | 10/10 PASS | 跟随，最终灭 |
+| 2026-11-16 E0 灯灭 | `4b49ae6` / `secure_comm.sof` | COM5 | 非法明文 `02`+15×`00`，TX=`fb8ae31ba5db9cad97364d8722d47326` | `2e9680d015f0262542f0796b435ebcb0` / `e0000000000000000000000000000000` | 预期失败（E0） | 保持灭 |
+| 2026-11-16 E0 灯亮 | `4b49ae6` / `secure_comm.sof` | COM5 | 先 on，再发同一非法帧 | `a47db3cbac8e8bf5c007ff13f2df1a09` / `e0010000000000000000000000000000` | 预期失败（E0） | 保持亮 |
+| 2026-11-16 半帧 | `4b49ae6` / `secure_comm.sof` | COM5 | 仅发 on 密文前 8 字节 `e37cd363dd7c87a0` | 0.6 s 内无完整回执 | 预期超时（退出码 2） | 保持灭 |
+| 2026-11-16 复位恢复 | `4b49ae6` / `secure_comm.sof` | COM5 | RESET 后重发完整 on 帧 | `b026dbf27fcdfabeeab01ed0cb78ac66` / `a0010000000000000000000000000000` | PASS | 复位后亮一下，随后 off 灭 |
+| 2026-11-16 结束 | `4b49ae6` / `secure_comm.sof` | COM5 | off | `966aab7bda958e77dd00c494cfc001d6` / `a0000000000000000000000000000000` | PASS | 灭 |
+
+实板使用的 `secure_comm.sof` 为 main `4b49ae6` 全编译产物，358718 字节，SHA256 `3055b06b1c8e6333762c84a7bcdc54dbcf1a3f6d81e4a1519ae490f47e0a769d`。D6 是四颗蓝色用户灯中的第一颗（用户称 LED2），红色 LED1 是电源指示灯。
 
 ## 当前实际验证记录
 
-验证日期：2026-11-15。工作起点为 `main` 的 `a4ff957051aee7c9557c87200c5d0a42fc696ec6`，本地分支为 `feature/pc-test`。超时修复、新增临界用例与 `sim/tb_pc_vectors.sv` 的提交为 `1a18b79`，本节的验证记录由紧随其后的文档提交补充。
+验证日期：2026-11-15（离线、模拟串口、ModelSim、Quartus）；2026-11-16（实板联调）。工作起点为 `main` 的 `a4ff957051aee7c9557c87200c5d0a42fc696ec6`，本地分支为 `feature/pc-test`。超时修复、新增临界用例与 `sim/tb_pc_vectors.sv` 的提交为 `1a18b79`，本节的离线记录由紧随其后的文档提交补充。
 
 环境：Windows，本机 Python 3.14.3，`cryptography 46.0.5`，`pyserial 3.5`。仓库中的 `.venv` 是 Linux/MSYS 风格环境，不能直接在 PowerShell 中使用；上面给出的 `.venv\Scripts` 步骤可在 Windows 创建正确环境。
 
@@ -167,6 +176,24 @@ set_global_assignment -name SEARCH_PATH rtl
 
 实际运行 `python pc/demo.py --help`，参数及 on/off 选项显示正常。对不存在的 `COM_TEST_NOT_PRESENT` 运行一次 `on`，pyserial 报告无法打开端口，程序打印串口错误及复位/重发步骤并返回 `2`。
 
-### 真实 FPGA：未验证
+### 真实 FPGA：已联调（2026-11-16）
 
-本机尚未确认用于本项目的 FPGA 串口和对应的正式 sof。截至主线提交 `6843343`，UART 与两个 AES 核已合入并通过模块仿真，协议控制器仍待集成。因此**没有执行真实 on/off、10 轮、非法命令或复位上板验收**，不能宣称硬件通过。上面的 testbench 仅证明 AES 解密 RTL 在仿真中与 PC 向量一致，Quartus 仅证明该 RTL 可综合，两者都不等于实板联调。**实板状态保持“待联调”**，待组长完成集成后按上节执行并填写记录。
+使用 main `4b49ae6` 全编译的 `secure_comm.sof`（358718 字节，SHA256 `3055b06b1c8e6333762c84a7bcdc54dbcf1a3f6d81e4a1519ae490f47e0a769d`），在野火征途 Pro（EP4CE10F17C8，50 MHz）上通过 USB-Blaster 下载：
+
+```text
+quartus_pgm -c USB-Blaster -m JTAG -o "P;D:\project_one\secure_comm.sof"
+```
+
+下载报告 EP4CE10F17 JTAG ID `0x020F10DD`，`Configuration succeeded -- 1 device(s) configured`，0 errors、0 warnings。串口为 COM5（USB-SERIAL CH340，115200 8N1，无流控）。
+
+实板结果：
+
+- on：RX=`b026dbf27fcdfabeeab01ed0cb78ac66`，PT=`a0010000000000000000000000000000`，PASS，D6 亮。
+- off：RX=`966aab7bda958e77dd00c494cfc001d6`，PT=`a0000000000000000000000000000000`，PASS，D6 灭。
+- 连续 10 轮 on/off 交替：10/10 PASS，灯态逐轮跟随，最终停在 off。
+- E0（灯灭时）：非法明文 `02`+15×`00`，TX=`fb8ae31ba5db9cad97364d8722d47326`，RX=`2e9680d015f0262542f0796b435ebcb0`，PT=`e0000000000000000000000000000000`，灯保持灭。
+- E0（灯亮时）：先 on 再发同一非法帧，RX=`a47db3cbac8e8bf5c007ff13f2df1a09`，PT=`e0010000000000000000000000000000`，灯保持亮；随后 off 恢复。
+- 半帧：只发 on 密文前 8 字节 `e37cd363dd7c87a0`，0.6 s 内无完整回执，D6 保持灭；按 RESET 并清空电脑端缓存后重发完整 on 帧，RX=`b026dbf27fcdfabeeab01ed0cb78ac66`，PT=`a0010000000000000000000000000000`，PASS，D6 亮了一下；最后 off，D6 灭。
+- D6 为四颗蓝色用户灯中的第一颗（用户称 LED2），红色 LED1 为电源指示灯；上述亮/灭均由人工观察确认。
+
+结论：本块板、本 `secure_comm.sof`、COM5 的实板联调通过，状态由“待联调”更新为“已联调（2026-11-16）”。该 sof 下载到 SRAM，断电后需重新下载；换提交或换板必须重跑。1 号任务书要求的“另一成员从相同提交重新编译并演示”不在 6 号本机记录范围内，仍待 1 号补做。
