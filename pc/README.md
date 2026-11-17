@@ -11,6 +11,8 @@ python pc/demo.py --port COM3 --command disarm
 
 arm/disarm 分别复用 on/off 的明文、密文和回执格式，老命令仍可用。回执只确认 FPGA 布防位，不包含本地报警、消音或计数状态，也不识别下载的 revision，所以必须先核对 SOF。按 KEY1 触发、KEY2 消音、KEY3 自检、KEY4 清零的完整步骤见 [报警演示说明](../docs/alarm-demo.md)。
 
+2026-11-17 已在真实 COM8 完成报警版联调，10 轮连续测试共 20 条加密请求/回执全部通过，并完成使用者现场灯光、声音、数码管和按键核对。对应实现提交 `624afd3`，本轮证据、逐灯诊断及最终恢复状态见 [实板验收记录](../docs/acceptance-2026-11-17.md)。
+
 ## 功能与接口
 
 `demo.py` 每次运行只发送一条控制请求（on/off，或报警版语义的 arm/disarm），然后接收、解密并校验一条回执，最后关闭串口。它复用 `reference.py`，不另行实现 AES。
