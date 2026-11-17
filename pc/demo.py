@@ -1,7 +1,8 @@
-"""Send one encrypted LED command and validate its 16-byte FPGA reply.
+"""Send one encrypted control command and validate its 16-byte FPGA reply.
 
 Run from the repository root, for example:
     python pc/demo.py --port COM3 --command on
+    python pc/demo.py --port COM3 --command arm  # secure_alarm revision
 """
 
 import argparse
@@ -81,7 +82,7 @@ def reply_error(plaintext, command):
             f"灯保持{'亮' if plaintext[1] else '灭'}。"
         )
 
-    expected = int(command == "on")
+    expected = int(command in ("on", "arm"))
     if plaintext[1] != expected:
         return (
             f"回执灯状态与 {command} 命令不一致："
@@ -106,7 +107,7 @@ def run(port_name, command):
             dsrdtr=False,
         ) as port:
             port.reset_input_buffer()
-            ciphertext = request(command == "on")
+            ciphertext = request(command in ("on", "arm"))
             written = port.write(ciphertext)
             if written != FRAME_SIZE:
                 raise CommunicationError(
@@ -124,20 +125,27 @@ def run(port_name, command):
     except (serial.SerialException, OSError) as error:
         raise CommunicationError(f"串口 {port_name} 通信失败：{error}") from error
 
-    print(
-        f"判定：PASS，{command} 命令回执有效，"
-        f"FPGA 报告灯已{'打开' if command == 'on' else '关闭'}。"
-        "请同时人工核对板上 D6 的实际状态。"
-    )
+    if command in ("arm", "disarm"):
+        print(
+            f"判定：PASS，FPGA 报告已{'布防' if command == 'arm' else '撤防'}。"
+            "请确认下载的是 secure_alarm，并核对板上 D6。"
+            "该回执不包含按键报警、消音或事件计数状态。"
+        )
+    else:
+        print(
+            f"判定：PASS，{command} 命令回执有效，"
+            f"FPGA 报告灯已{'打开' if command == 'on' else '关闭'}。"
+            "请同时人工核对板上 D6 的实际状态。"
+        )
     return 0
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="向 FPGA 发送一次 AES-128 加密的开灯/关灯命令并校验回执。"
+        description="发送一次 AES-128 加密指令：on/off 控灯，报警版用 arm/disarm 布防/撤防。"
     )
     parser.add_argument("--port", required=True, help="串口名称，例如 COM3")
-    parser.add_argument("--command", required=True, choices=("on", "off"))
+    parser.add_argument("--command", required=True, choices=("on", "off", "arm", "disarm"))
     return parser.parse_args(argv)
 
 

@@ -1,0 +1,8 @@
+source secure_comm.qsf
+set_global_assignment -name TOP_LEVEL_ENTITY alarm_top
+set_global_assignment -name VERILOG_FILE ../rtl/alarm_top.v
+set_global_assignment -name VERILOG_FILE ../rtl/key_debounce.v
+set_global_assignment -name VERILOG_FILE ../rtl/alarm_ctrl.v
+set_global_assignment -name VERILOG_FILE ../rtl/alarm_display.v
+set_global_assignment -name SDC_FILE alarm.sdc
+source alarm_pins.tcl
