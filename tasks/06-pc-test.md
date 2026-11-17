@@ -1,5 +1,7 @@
 # 6 号任务书 · 电脑端与联调记录
 
+报警版 `secure_alarm` 已增加 `arm` / `disarm` 参数别名，分别复用 on / off 的请求和回执。电脑输出区分布防回执与本地报警状态，不把未上报的按键事件显示为已确认。相关交付条件见 [07-alarm-extension.md](07-alarm-extension.md)。
+
 工作分支为 feature/pc-test。负责新建 pc/demo.py，可维护 pc/reference.py 和 pc/requirements.txt。串口接口、密钥和回执见 INTERFACE.md。
 
 开工时按 [并行开发与交付](../并行开发与交付.md) 使用模拟输入独立验证；交付文件和结果填写方式也见该说明。Fork 提交与同步见 [Git 协作说明](../Git协作说明.md)。

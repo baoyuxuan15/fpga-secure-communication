@@ -83,3 +83,25 @@ rtl/aes_tables.vh 在两个核的 module 内分别 include，提供本地函数 
 | 灭灯成功回执 | a0000000000000000000000000000000 | 966aab7bda958e77dd00c494cfc001d6 |
 
 业务向量可用 pc/reference.py 重算。标准分组及 AES 轮运算来自 NIST FIPS 197。[AES 标准原版，附录 C.1](https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.197.pdf)
+
+## 报警应用层扩展
+
+`secure_alarm` revision 顶层为 `alarm_top`，保留基础顶层的五个端口，新增 `key_n[3:0]` 输入和 `alarm_led_n`、`muted_led_n`、`test_led_n`、`beep`、`shcp`、`stcp`、`ds`、`oe` 输出。原 `top`、`comm_ctrl`、UART 与 AES 模块的名称、端口、握手及明密文向量全部沿用。
+
+在报警版中，原 `led_on` 的应用含义为 `armed`。布防 `arm` 与 `on` 使用 `01 + 15*00`，撤防 `disarm` 与 `off` 使用全零。回执第二字节仍仅表示布防位；末 14 字节仍为零，不能据此推断报警、消音、实际柜门或计数状态。重复布防保持现有报警和消音状态，不重复短响。按键事件不生成串口回执或主动上报。
+
+| 新模块 | 输入 | 输出 |
+|---|---|---|
+| key_debounce | clk、rst_n、低有效 key_n | pressed 单拍、held 稳定按下电平 |
+| alarm_ctrl | clk、rst_n、armed、key_pressed[3:0]、trigger_held | alarm_active、muted、selftest_active、count_bcd[15:0]、alarm_light、muted_light、test_light、beep |
+| alarm_display | clk、rst_n、count_bcd[15:0]、selftest_active | shcp、stcp、ds、oe |
+
+所有时序仍以 50 MHz `clk` 上升沿驱动，复位最高优先级。按键两级同步后需连续稳定 1,000,000 拍（20 ms）才接受按下/释放，按下一次只产生一拍 `pressed`。KEY1/2/3/4 分别映射位 0/1/2/3。`held` 使布防时已经按住 KEY1 的情况也能触发一次。
+
+报警处理优先级：撤防清除当前报警与消音 > KEY1 新事件触发（并取消旧消音）> KEY2 消音。KEY3 自检和 KEY4 清零只在撤防状态生效；从布防进入撤防的同拍忽略自检请求。事件计数在有效触发时递增、9999 饱和，撤防保留、KEY4/系统复位清零。系统复位不保存计数。
+
+蜂鸣器输出为 2 kHz 方波，空闲高电平；报警响 250 ms、停 250 ms，D7 同步闪烁。首次布防短响 100 ms。自检持续 1 秒，D7–D9 点亮、数码管显示 888888，D6 始终表示真实布防逻辑位。自检期间布防会中止自检并转为布防提示/报警处理。
+
+数码管使用高有效单个位选和低有效段码（bit7 为小数点）；右侧四位显示 BCD 计数、左侧两位空白。每个扫描字锁存为 14 位，按 `sel[0]` 到 `sel[5]`、`seg[7]` 到 `seg[0]` 顺序发送。转换期间 OE=1 消隐，14 个 SHCP 上升沿后产生 STCP 锁存，再启用 OE=0，每位保持约 1 ms。所有串行输出由 clk 计数使能产生，未引入内部派生时钟。
+
+新增外设引脚见 `quartus/alarm_pins.tcl`；`quartus/alarm.sdc` 只对异步按键输入到第一级同步器作 false path，后级同步和应用逻辑仍检查时序。具体引脚来源及实板核对见 [报警演示说明](docs/alarm-demo.md)。

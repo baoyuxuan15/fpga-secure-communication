@@ -1,5 +1,7 @@
 # 1 号任务书 · 组长与集成
 
+报警应用扩展由集成角色维护 `alarm_top` 和新增外设模块、`secure_alarm` revision；原 `top` 和成员核心端口保持原样。具体新增文件、测试与交付条件见 [07-alarm-extension.md](07-alarm-extension.md)。
+
 工作分支为 feature/integration。负责 rtl/top.v、rtl/board_echo.v、quartus/ 和公共文档，维护 rtl/aes_tables.vh 与共享的 sim/tb_aes.sv。角色 2–6 各自在自己的分支实现模块。
 
 开工时按 [并行开发与交付](../并行开发与交付.md) 使用模拟输入独立验证；交付文件和结果填写方式也见该说明。Fork 提交与同步见 [Git 协作说明](../Git协作说明.md)。

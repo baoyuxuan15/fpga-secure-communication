@@ -252,6 +252,18 @@ class ExchangeTests(unittest.TestCase):
         self.assertIn("966aab7bda958e77dd00c494cfc001d6", output)
         self.assertIn("a0000000000000000000000000000000", output)
 
+    def test_alarm_aliases_use_existing_vectors_and_validate_state(self):
+        for command, state in (("arm", True), ("disarm", False)):
+            result, port, output, errors = self.exchange(command, reply(state))
+            self.assertEqual(result, 0)
+            self.assertEqual(port.writes, [request(state)])
+            self.assertIn("secure_alarm", output)
+            self.assertIn("不包含", output)
+            self.assertEqual(errors, "")
+            result, _, output, _ = self.exchange(command, reply(not state))
+            self.assertEqual(result, 1)
+            self.assertIn("不一致", output)
+
     def test_malformed_reply_fails_and_closes(self):
         bad_reply = transform(bytes([0xB0]) + bytes(15))
         result, port, output, _ = self.exchange("on", bad_reply)
